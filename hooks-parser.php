@@ -4,6 +4,7 @@
  * Credit: https://github.com/woothemes/woocommerce/blob/master/apigen/hook-docs.php
  */
 class Hooks_Parser {
+
 	private static $current_file           = '';
 	private static $custom_hooks_found     = '';
 
@@ -11,6 +12,8 @@ class Hooks_Parser {
 		$scanned = array();
 
 		self::$custom_hooks_found = array();
+
+		echo '<pre>';
 
 		foreach ( $class_files as $f ) {
 			if ( ! is_file( $f ) ) {
@@ -49,12 +52,11 @@ class Hooks_Parser {
 							break;
 							case 'filter' :
 							case 'action' :
-								if (
-									is_array( $token )
-									&& is_int( $token[0] )
-									&& 'T_DOC_COMMENT' == token_name( $token[0] )
-								) {
-									break;
+								if ( is_array( $token )
+								&& is_int( $token[0] )
+								&& 'T_DOC_COMMENT' == token_name( $token[0] )
+									) {
+										break;
 								}
 
 								if ( in_array( $current_function, array( 'sanitize_bookmark_field' ), true ) ) {
@@ -104,7 +106,7 @@ class Hooks_Parser {
 										$hook .= $next_hook;
 										// echo '<xmp>$hook: '. print_r( $hook, true ) .'</xmp>';
 									}
-								}
+								}// End foreach().
 
 								if ( '{' === $hook ) {
 									$open = true;
@@ -145,8 +147,8 @@ class Hooks_Parser {
 
 										$hook .= $next_hook;
 										// echo '<xmp>$hook: '. print_r( $hook, true ) .'</xmp>';
-									}
-								}
+									}// End while().
+								}// End if().
 
 								// if ( '{' === $hook ) {
 								// 	echo '<xmp>'. __LINE__ .') $details: '. print_r( array(
@@ -170,24 +172,25 @@ class Hooks_Parser {
 								if ( isset( self::$custom_hooks_found[ $hook ] ) ) {
 									self::$custom_hooks_found[ $hook ]['file'][] = self::$current_file;
 								} else {
- 									self::$custom_hooks_found[ $hook ] = array(
-										'line'     => $token[2],
-										'class'    => $current_class,
-										'function' => $current_function,
-										'file'     => array( self::$current_file ),
-										'type'     => $token_type
+									self::$custom_hooks_found[ $hook ] = array(
+									'line'     => $token[2],
+									'class'    => $current_class,
+									'function' => $current_function,
+									'file'     => array( self::$current_file ),
+									'type'     => $token_type,
 									);
 								}
 							break;
-						}
+						}// End switch().
 						$token_type = false;
-					}
-				}
-			}
-		}
+					}// End if().
+				}// End if().
+			}// End foreach().
+		}// End foreach().
 
 		ksort( self::$custom_hooks_found );
 
+		$triggers = array();
 		$count = 0;
 		foreach ( self::$custom_hooks_found as $hook => $details ) {
 			if ( $hook && ! in_array( $hook, array( '$args', '$page_hook', '$tag', '$value' ) ) ) {
@@ -201,44 +204,31 @@ class Hooks_Parser {
 					$contents = '';
 					foreach ( explode( '$', $trigger ) as $key => $value ) {
 						if ( 0 === strpos( strrev( $value ), '{' ) ) {
-							$contents .= rtrim( $value, '{' ) . '${'. ( $key + 1 ) . ':\\\\$';
+							$contents .= rtrim( $value, '{' ) . '${' . ( $key + 1 ) . ':\\\\$';
 						} else {
 							$contents .= $value;
 						}
-						// if ( 0 === strpos( $value, '}' ) ) {
-						// 	$contents .= rtrim( $value, '{' ) . '\\${1:\\$';
-						// }
-						// "add_option_${1:\\$option}"
 					}
-					$die = true;
-						// wp_die( '<xmp>'. __LINE__ .') : '. print_r( compact( 'hook', 'details', 'trigger', 'key', 'value', 'contents' ), true ) .'</xmp>' );
 				}
-
-				// $contents = str_replace( '$', '\\\$', $trigger );
-				// $trigger = '${' . ($key+1) . ':' .  esc_html( $trigger ) . '}';
 
 				$count++;
-				// print( '<xmp>'. __LINE__ .') $trigger: '. print_r( $trigger, true ) .'</xmp>' );
-				// wp_die( '<xmp>'. __LINE__ .') $details: '. print_r( $details, true ) .'</xmp>' );
-				echo '{"trigger": "'. str_replace( "'", '', $trigger ) .'", "contents": "'. $contents .'" },' . "<br>";
+				$triggers[] = '{"trigger": "' . str_replace( "'", '', $trigger ) . '", "contents": "' . $contents . '" },';
 
-				$contents = "add_" . $details['type'] ."( '" . $contents . "'";
+				$contents = 'add_' . $details['type'] . "( '" . $contents . "'";
 				$two = ++$key;
 				$one = ++$key;
-				$contents .= ', ${'. $one . ':\'${'. $two . ':callback}\'}';
-				$contents .= '${'. ( ++$key ) . '}';
-				$contents .= " );";
+				$contents .= ', ${' . $one . ':\'${' . $two . ':callback}\'}';
+				$contents .= '${' . ( ++$key ) . '}';
+				$contents .= ' );';
 
-				echo '{"trigger": "'. ( 'action' === $details['type'] ? 'aa_' : 'af_' ) . str_replace( "'", '', $trigger ) .'", "contents": "'. $contents .'" },' . "<br>";
+				$triggers[] = '{"trigger": "' . ( 'action' === $details['type'] ? 'aa_' : 'af_' ) . str_replace( "'", '', $trigger ) . '", "contents": "' . $contents . '" },';
 
-				// wp_die( '<xmp>'. __LINE__ .') : '. print_r( $details, true ) .'</xmp>' );
-				if ( $die ) {
+			}// End if().
+		}// End foreach().
 
-					// wp_die( '<xmp>'. __LINE__ .') : '. print_r( compact( 'hook', 'details', 'trigger', 'key', 'value', 'contents' ), true ) .'</xmp>' );
-				}
-			}
-		}
+		echo "Hooks (". $count . "):<br>";
+		echo rtrim( implode( '<br>', $triggers ), ',' );
 
-		die( '<xmp>'. __LINE__ .') $count: '. print_r( $count, true ) .'</xmp>' );
+		die;
 	}
 }
