@@ -38,9 +38,9 @@ class Hooks_Parser {
 						$token_type = 'class';
 					} elseif ( $token[0] == T_FUNCTION ) {
 						$token_type = 'function';
-					} elseif ( $token[1] === 'do_action' ) {
+					} elseif ( $token[1] === 'do_action' || $token[1] === 'do_action_ref_array' ) {
 						$token_type = 'action';
-					} elseif ( $token[1] === 'apply_filters' ) {
+					} elseif ( $token[1] === 'apply_filters' || $token[1] === 'apply_filters_ref_array' ) {
 						$token_type = 'filter';
 					} elseif ( $token_type && ! empty( trim( $token[1] ) ) ) {
 						switch ( $token_type ) {
@@ -53,9 +53,9 @@ class Hooks_Parser {
 							case 'filter' :
 							case 'action' :
 								if ( is_array( $token )
-								&& is_int( $token[0] )
-								&& 'T_DOC_COMMENT' == token_name( $token[0] )
-									) {
+									&& is_int( $token[0] )
+									&& 'T_DOC_COMMENT' == token_name( $token[0] )
+								) {
 										break;
 								}
 
@@ -150,7 +150,10 @@ class Hooks_Parser {
 									}// End while().
 								}// End if().
 
-								// if ( '{' === $hook ) {
+								if ( '$hook' === $hook ) {
+									break;
+								}
+								// if ( '$hook' === $hook ) {
 								// 	echo '<xmp>'. __LINE__ .') $details: '. print_r( array(
 								// 		'line'     => $token[2],
 								// 		'class'    => $current_class,
