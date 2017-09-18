@@ -5,10 +5,19 @@
  */
 class Hooks_Parser {
 
-	private static $current_file           = '';
+	private $current_file           = '';
 	private static $custom_hooks_found     = '';
+	private $debug = false;
 
 	public static function process_hooks( $all_files ) {
+		( new self() )->_process_hooks( $all_files );
+	}
+
+	protected function __construct() {
+		self::$custom_hooks_found = array();
+	}
+
+	protected function _process_hooks( $all_files ) {
 		$scanned = array();
 
 		self::$custom_hooks_found = array();
@@ -20,27 +29,27 @@ class Hooks_Parser {
 				continue;
 			}
 
-			self::$current_file = str_replace( ABSPATH, '', $f );
-			$tokens             = token_get_all( file_get_contents( $f ) );
+			$this->current_file = basename( $f );
+			$this->tokens       = token_get_all( file_get_contents( $f ) );
 			$token_type         = false;
 			$current_class      = '';
 			$current_function   = '';
 
-			if ( in_array( self::$current_file, $scanned, true ) ) {
+			if ( in_array( $this->current_file, $scanned, true ) ) {
 				continue;
 			}
 
-			$scanned[] = self::$current_file;
+			$scanned[] = $this->current_file;
 
-			foreach ( $tokens as $index => $token ) {
+			foreach ( $this->tokens as $this->index => $token ) {
 				if ( is_array( $token ) ) {
 					if ( $token[0] == T_CLASS ) {
 						$token_type = 'class';
 					} elseif ( $token[0] == T_FUNCTION ) {
 						$token_type = 'function';
-					} elseif ( $token[1] === 'do_action' || $token[1] === 'do_action_ref_array' ) {
+					} elseif ( $token[1] === 'do_action' /*|| $token[1] === 'do_action_ref_array'*/ ) {
 						$token_type = 'action';
-					} elseif ( $token[1] === 'apply_filters' || $token[1] === 'apply_filters_ref_array' ) {
+					} elseif ( $token[1] === 'apply_filters' /*|| $token[1] === 'apply_filters_ref_array'*/ ) {
 						$token_type = 'filter';
 					} elseif ( $token_type && ! empty( trim( $token[1] ) ) ) {
 						switch ( $token_type ) {
@@ -63,123 +72,87 @@ class Hooks_Parser {
 									break;
 								}
 
-								$hook = trim( $token[1], "'" );
-								$loop = 0;
+								$this->hook = trim( $token[1], "'" );
+								$this->loop = 0;
+
+								$next_next_bit = false;
+
+								// $this->debug = 386 == $token[0] && 3977 == $token[2];
+								// $debug = false;
 
 								foreach ( array( '_', '-' ) as $separator ) {
-									if ( $separator !== substr( $hook, '-1', 1 ) ) {
+									if ( $separator !== substr( $this->hook, '-1', 1 ) ) {
 										continue;
 									}
 
-									$hook .= '{';
-									$open = true;
-									// Keep adding to hook until we find a comma or colon
-									while ( 1 ) {
-										$loop ++;
-										$next_hook  = trim( trim( is_string( $tokens[ $index + $loop ] ) ? $tokens[ $index + $loop ] : $tokens[ $index + $loop ][1], '"' ), "'" );
-
-										if ( in_array( $next_hook, array( '.', '{', '}', '"', "'", ' ' ) ) ) {
-											continue;
-										}
-
-										$hook_first = substr( $next_hook, 0, 1 );
-										$hook_last  = substr( $next_hook, -1, 1 );
-
-										if ( in_array( $next_hook, array( ',', ';' ), true ) ) {
-											if ( $open ) {
-												$hook .= '}';
-												$open = false;
-											}
-											break;
-										}
-
-										if ( $separator === $hook_first && '->' !== substr( $next_hook, 0, 2 ) ) {
-											$next_hook = '}' . $next_hook;
-											$open = false;
-										}
-
-										if ( $separator === $hook_last ) {
-											$next_hook .= '{';
-											$open = true;
-										}
-
-										$hook .= $next_hook;
-										// echo '<xmp>$hook: '. print_r( $hook, true ) .'</xmp>';
-									}
+									$this->build_hook_name_with_separators( $separator );
 								}// End foreach().
 
-								if ( '{' === $hook ) {
-									$open = true;
-									// Keep adding to hook until we find a comma or colon
-									while ( 1 ) {
-										$loop ++;
-										$next_hook = trim( trim( is_string( $tokens[ $index + $loop ] ) ? $tokens[ $index + $loop ] : $tokens[ $index + $loop ][1], '"' ), "'" );
-
-										if ( '}' === $next_hook ) {
-											$hook .= '}';
-											continue;
-										}
-
-										if ( in_array( $next_hook, array( '.', '{', '"', "'", ' ' ) ) ) {
-											continue;
-										}
-
-										$hook_first = substr( $next_hook, 0, 1 );
-										$hook_last  = substr( $next_hook, -1, 1 );
-
-										if ( in_array( $next_hook, array( ',', ';' ), true ) ) {
-											if ( $open ) {
-												// $hook .= '}';
-												$open = false;
-											}
-											break;
-										}
-
-										if ( $separator === $hook_first && '->' !== substr( $next_hook, 0, 2 ) ) {
-											$next_hook = '}' . $next_hook;
-											$open = false;
-										}
-
-										if ( $separator === $hook_last ) {
-											$next_hook .= '{';
-											$open = true;
-										}
-
-										$hook .= $next_hook;
-										// echo '<xmp>$hook: '. print_r( $hook, true ) .'</xmp>';
-									}// End while().
+								if ( '{' === $this->hook ) {
+									$this->build_hook_name();
 								}// End if().
 
-								if ( '$hook' === $hook ) {
+								$this->hook = str_replace( array( "'", '"' ), '', $this->hook );
+
+								if (
+									empty( $this->hook )
+									|| in_array( $current_class, array(
+										'WP_Hook',
+									), true )
+									|| in_array( $current_function, array(
+										'add_action',
+										'did_action',
+										'has_filter',
+										'do_action_ref_array',
+										'apply_filters_ref_array',
+										'do_action_deprecated',
+										'apply_filters_deprecated',
+									), true )
+									|| in_array( $this->hook, array(
+										'$hook',
+										'$page_hook',
+										'{$field}',
+									), true )
+								) {
 									break;
 								}
-								// if ( '$hook' === $hook ) {
-								// 	echo '<xmp>'. __LINE__ .') $details: '. print_r( array(
-								// 		'line'     => $token[2],
-								// 		'class'    => $current_class,
-								// 		'function' => $current_function,
-								// 		'file'     => array( self::$current_file ),
-								// 		'type'     => $token_type
-								// 	), true ) .'</xmp>';
-								// 	echo '<xmp>'. __LINE__ .') $f: '. print_r( $f, true ) .'</xmp>';
-								// 	echo '<xmp>'. __LINE__ .') $tokens[ $index - 3]: '. print_r( $tokens[ $index - 3], true ) .'</xmp>';
-								// 	echo '<xmp>'. __LINE__ .') $tokens[ $index - 2]: '. print_r( $tokens[ $index - 2], true ) .'</xmp>';
-								// 	echo '<xmp>'. __LINE__ .') $tokens[ $index - 1]: '. print_r( $tokens[ $index - 1], true ) .'</xmp>';
-								// 	echo '<xmp>'. __LINE__ .') $token: '. print_r( $token, true ) .'</xmp>';
-								// 	// echo '<xmp>'. __LINE__ .') $token: '. print_r( 'T_DOC_COMMENT' == token_name( $token[0] ), true ) .'</xmp>';
-								// 	echo '<xmp>'. __LINE__ .') $tokens[ $index + 1]: '. print_r( $tokens[ $index + 1], true ) .'</xmp>';
-								// 	echo '<xmp>'. __LINE__ .') $tokens[ $index + 2]: '. print_r( $tokens[ $index + 2], true ) .'</xmp>';
-								// 	echo '<xmp>'. __LINE__ .') $tokens[ $index + 3]: '. print_r( $tokens[ $index + 3], true ) .'</xmp>';
-								// 	wp_die( '<xmp>'. __LINE__ .') $hook: '. print_r( $hook, true ) .'</xmp>' );
-								// }
-								if ( isset( self::$custom_hooks_found[ $hook ] ) ) {
-									self::$custom_hooks_found[ $hook ]['file'][] = self::$current_file;
+								if ( in_array( $this->hook, array(
+									'{{$field}',
+									'$args',
+									'$page_hook',
+									'$tag',
+									'$value',
+								), true ) /*|| 0 === strpos( $this->hook, '{$old_status}' )*/ ) {
+									echo '<xmp>'. __LINE__ .') $details: '. print_r( array(
+										'hook'            => $this->hook,
+										'line'            => $token[2],
+										'class'           => $current_class,
+										'function'        => $current_function,
+										'file'            => array( $this->current_file ),
+										'$next_next_bit' => $next_next_bit,
+									), true ) .'</xmp>';
+									echo '<xmp>'. __LINE__ .') $f: '. print_r( $f, true ) .'</xmp>';
+									echo '<xmp>'. __LINE__ .') $this->tokens[ $this->index - 3]: '. print_r( $this->tokens[ $this->index - 3], true ) .'</xmp>';
+									echo '<xmp>'. __LINE__ .') $this->tokens[ $this->index - 2]: '. print_r( $this->tokens[ $this->index - 2], true ) .'</xmp>';
+									echo '<xmp>'. __LINE__ .') $this->tokens[ $this->index - 1]: '. print_r( $this->tokens[ $this->index - 1], true ) .'</xmp>';
+									echo '<xmp>'. __LINE__ .') $token: '. print_r( $token, true ) .'</xmp>';
+									// echo '<xmp>'. __LINE__ .') $token: '. print_r( 'T_DOC_COMMENT' == token_name( $token[0] ), true ) .'</xmp>';
+									echo '<xmp>'. __LINE__ .') $this->tokens[ $this->index + 1]: '. print_r( $this->tokens[ $this->index + 1], true ) .'</xmp>';
+									echo '<xmp>'. __LINE__ .') $this->tokens[ $this->index + 2]: '. print_r( $this->tokens[ $this->index + 2], true ) .'</xmp>';
+									echo '<xmp>'. __LINE__ .') $this->tokens[ $this->index + 3]: '. print_r( $this->tokens[ $this->index + 3], true ) .'</xmp>';
+									echo '<hr/>';
+									echo '<br/>';
+									// wp_die( '<xmp>'. __LINE__ .') $this->hook: '. print_r( $this->hook, true ) .'</xmp>' );
+								}
+
+								if ( isset( self::$custom_hooks_found[ $this->hook ] ) ) {
+									self::$custom_hooks_found[ $this->hook ]['file'][] = $this->current_file;
 								} else {
-									self::$custom_hooks_found[ $hook ] = array(
+									self::$custom_hooks_found[ $this->hook ] = array(
 									'line'     => $token[2],
 									'class'    => $current_class,
 									'function' => $current_function,
-									'file'     => array( self::$current_file ),
+									'file'     => array( $this->current_file ),
 									'type'     => $token_type,
 									);
 								}
@@ -192,8 +165,9 @@ class Hooks_Parser {
 		}// End foreach().
 
 		ksort( self::$custom_hooks_found );
+		// wp_die( '<xmp>'. __LINE__ .') : '. print_r( array_keys( self::$custom_hooks_found ), true ) .'</xmp>' );
 
-		$triggers = array();
+		$triggers = $trigger_names = array();
 		$count = 0;
 		foreach ( self::$custom_hooks_found as $hook => $details ) {
 			if ( $hook && ! in_array( $hook, array( '$args', '$page_hook', '$tag', '$value' ) ) ) {
@@ -215,7 +189,28 @@ class Hooks_Parser {
 				}
 
 				$count++;
-				$triggers[] = '{"trigger": "' . str_replace( "'", '', $trigger ) . '", "contents": "' . $contents . '" },';
+
+				$trigger = strtr( $trigger, array(
+					'comment->comment'   => 'comment',
+					'post->post'         => 'post',
+					'user->user'         => 'user',
+					'()->'               => '_',
+					'()'                 => '_',
+					'this->'             => '',
+					'->'                 => '_',
+					'get_current_screen' => 'current_screen',
+					'_REQUEST['          => '_REQUEST_',
+					'_GET['              => '_GET_',
+					'{$'                 => '&lt;',
+					'{'                  => '&lt;',
+					'}'                  => '&gt;',
+					']'                  => '',
+					"'"                  => '',
+				) );
+
+				$trigger_names[] = $trigger;
+
+				$triggers[] = '{"trigger": "' . $trigger . '", "contents": "' . $contents . '" },';
 
 				$contents = 'add_' . $details['type'] . "( '" . $contents . "'";
 				$two = ++$key;
@@ -224,14 +219,149 @@ class Hooks_Parser {
 				$contents .= '${' . ( ++$key ) . '}';
 				$contents .= ' );';
 
-				$triggers[] = '{"trigger": "' . ( 'action' === $details['type'] ? 'aa_' : 'af_' ) . str_replace( "'", '', $trigger ) . '", "contents": "' . $contents . '" },';
+				$triggers[] = '{"trigger": "' . ( 'action' === $details['type'] ? 'aa_' : 'af_' ) . $trigger . '", "contents": "' . $contents . '" },';
 
 			}// End if().
 		}// End foreach().
+
+		// foreach ( $trigger_names as $trigger_name ) {
+		// 	echo '<xmp>'. print_r( $trigger_name, true ) .'</xmp>';
+		// }
+		// echo '<br/>';
+		// echo '<hr/>';
+		// echo '<br/>';
+		// wp_die( '<xmp>'. __LINE__ .') : '. print_r( 'test', true ) .'</xmp>' );
 
 		echo "Hooks (". $count . "):<br>";
 		echo rtrim( implode( '<br>', $triggers ), ',' );
 
 		die;
+	}
+
+	protected function build_hook_name_with_separators( $separator ) {
+		static $counter = 0;
+		$this->loop = 0;
+		$this->hook .= '{';
+		$open = true;
+		// Keep adding to hook until we find a comma or colon
+		while ( 1 ) {
+			$d = $this->loop( array( '.', '{', '}', '"', "'", ' ' ), $this->debug ? __FUNCTION__ . $counter : false );
+			if ( ! $d ) {
+				continue;
+			}
+
+			if ( in_array( $d['next'], array( ',', ';' ), true ) ) {
+				if ( $open ) {
+					$this->hook .= '}';
+					$open = false;
+				}
+				break;
+			}
+
+			if ( ')' === $d['next'] ) {
+				if ( in_array( $d['next_next'], array( ',', ';' ), true ) ) {
+					if ( $open ) {
+						$this->hook .= '}';
+						$open = false;
+					}
+					break;
+				}
+			}
+
+			if (
+				'$' === $d['first']
+				&& in_array( $d['next_next'], array( '->', '}' ), true )
+				&& '{' !== substr( $this->hook, -1, 1 )
+			) {
+				echo '<xmp>'. __LINE__ .') $this->hook: '. print_r( $this->hook, true ) .'</xmp>';
+				$this->hook .= '{';
+				$open = true;
+			}
+
+			if ( $separator === $d['first'] && '->' !== substr( $d['next'], 0, 2 ) ) {
+				$d['next'] = '}' . $d['next'];
+				$open = false;
+			}
+
+			if ( $separator === $d['last'] ) {
+				$d['next'] .= '{';
+				$open = true;
+			}
+
+			$this->hook .= $d['next'];
+		}
+	}
+
+	protected function build_hook_name() {
+		static $counter = 0;
+
+		$open = true;
+		// Keep adding to hook until we find a comma or colon
+		while ( 1 ) {
+			$d = $this->loop( array( '.', '{', '"', "'", ' ' ), $this->debug ? __FUNCTION__ . $counter++ : false );
+			if ( ! $d ) {
+				continue;
+			}
+
+			if ( '}' === $d['next'] ) {
+				$this->hook .= '}';
+				continue;
+			}
+
+			if ( in_array( $d['next'], array( ',', ';' ), true ) ) {
+				if ( $open ) {
+					// $this->hook .= '}';
+					$open = false;
+				}
+				break;
+			}
+
+			if ( ')' === $d['next'] ) {
+				if ( in_array( $d['next_next'], array( ',', ';' ), true ) ) {
+					if ( $open ) {
+						$open = false;
+					}
+					break;
+				}
+			}
+
+			if ( '$' === $d['first'] && '{' !== substr( $this->hook, '-1', 1 ) /*&& in_array( $d['next_next'], array( '->', '$' ), true )*/ ) {
+				$this->hook .= '{';
+				$open = true;
+			}
+
+			$this->hook .= $d['next'];
+		}// End while().
+
+	}
+
+	protected function loop( $skip_list, $debug ) {
+		$this->loop++;
+
+		$next = $this->get_token_string( $this->index + $this->loop );
+
+		if ( in_array( $next, $skip_list, true ) ) {
+			return false;
+		}
+
+		$next_next = $this->get_token_string( $this->index + $this->loop + 1 );
+		$first     = substr( $next, 0, 1 );
+		$last      = substr( $next, -1, 1 );
+
+		$d = compact( 'first', 'last', 'next', 'next_next' );
+
+		if ( $debug ) {
+			echo '<xmp>'. __LINE__ .') ' . $debug . ': '. print_r( array(
+				'$this->hook' => $this->hook,
+				'$d' => $d,
+			), true ) .'</xmp>';
+		}
+
+		return $d;
+	}
+
+
+	public function get_token_string( $key ) {
+		return trim( trim( is_string( $this->tokens[ $key ] ) ? $this->tokens[ $key ] : $this->tokens[ $key ][1], '"' ), "'" );
 	}
 }
