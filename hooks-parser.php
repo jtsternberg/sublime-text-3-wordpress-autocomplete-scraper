@@ -47,9 +47,9 @@ class Hooks_Parser {
 						$token_type = 'class';
 					} elseif ( $token[0] == T_FUNCTION ) {
 						$token_type = 'function';
-					} elseif ( $token[1] === 'do_action' /*|| $token[1] === 'do_action_ref_array'*/ ) {
+					} elseif ( $token[1] === 'do_action' || $token[1] === 'do_action_ref_array' ) {
 						$token_type = 'action';
-					} elseif ( $token[1] === 'apply_filters' /*|| $token[1] === 'apply_filters_ref_array'*/ ) {
+					} elseif ( $token[1] === 'apply_filters' || $token[1] === 'apply_filters_ref_array' ) {
 						$token_type = 'filter';
 					} elseif ( $token_type && ! empty( trim( $token[1] ) ) ) {
 						switch ( $token_type ) {
