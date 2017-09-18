@@ -8,25 +8,25 @@ class Hooks_Parser {
 	private static $current_file           = '';
 	private static $custom_hooks_found     = '';
 
-	public static function process_hooks( $class_files ) {
+	public static function process_hooks( $all_files ) {
 		$scanned = array();
 
 		self::$custom_hooks_found = array();
 
 		echo '<pre>';
 
-		foreach ( $class_files as $f ) {
+		foreach ( $all_files as $f ) {
 			if ( ! is_file( $f ) ) {
 				continue;
 			}
 
-			self::$current_file = basename( $f );
+			self::$current_file = str_replace( ABSPATH, '', $f );
 			$tokens             = token_get_all( file_get_contents( $f ) );
 			$token_type         = false;
 			$current_class      = '';
 			$current_function   = '';
 
-			if ( in_array( self::$current_file, $scanned ) ) {
+			if ( in_array( self::$current_file, $scanned, true ) ) {
 				continue;
 			}
 
