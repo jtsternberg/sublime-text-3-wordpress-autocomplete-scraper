@@ -75,8 +75,6 @@ class Hooks_Parser {
 								$this->hook = trim( $token[1], "'" );
 								$this->loop = 0;
 
-								$next_next_bit = false;
-
 								// $this->debug = 386 == $token[0] && 3977 == $token[2];
 								// $debug = false;
 
@@ -129,7 +127,6 @@ class Hooks_Parser {
 										'class'           => $current_class,
 										'function'        => $current_function,
 										'file'            => array( $this->current_file ),
-										'$next_next_bit' => $next_next_bit,
 									), true ) .'</xmp>';
 									echo '<xmp>'. __LINE__ .') $f: '. print_r( $f, true ) .'</xmp>';
 									echo '<xmp>'. __LINE__ .') $this->tokens[ $this->index - 3]: '. print_r( $this->tokens[ $this->index - 3], true ) .'</xmp>';
@@ -359,7 +356,6 @@ class Hooks_Parser {
 
 		return $d;
 	}
-
 
 	public function get_token_string( $key ) {
 		return trim( trim( is_string( $this->tokens[ $key ] ) ? $this->tokens[ $key ] : $this->tokens[ $key ][1], '"' ), "'" );
