@@ -29,7 +29,7 @@ class Hooks_Parser {
 				continue;
 			}
 
-			$this->current_file = basename( $f );
+			$this->current_file = str_replace( ABSPATH, '', $f );
 			$this->tokens       = token_get_all( file_get_contents( $f ) );
 			$token_type         = false;
 			$current_class      = '';
